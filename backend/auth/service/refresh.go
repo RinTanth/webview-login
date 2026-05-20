@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -29,36 +30,44 @@ func NewRefreshService(userRepo repository.DatabaseRepo, tokenRepo repository.Re
 func (s *RefreshService) Refresh(ctx context.Context, refreshToken string) (RefreshResult, error) {
 	userID, err := parseUserIDFromToken(refreshToken)
 	if err != nil {
+		slog.Warn("refresh failed: invalid token format")
 		return RefreshResult{}, ErrInvalidToken
 	}
 
 	valid, err := s.tokenRepo.GetRefreshToken(ctx, userID.String(), refreshToken)
 	if err != nil {
+		slog.Error("refresh failed: redis error", "user_id", userID, "error", err)
 		return RefreshResult{}, err
 	}
 	if !valid {
+		slog.Warn("refresh failed: token mismatch or expired", "user_id", userID)
 		return RefreshResult{}, ErrInvalidToken
 	}
 
 	user, err := s.userRepo.FindByID(userID)
 	if err != nil || user == nil {
+		slog.Warn("refresh failed: user not found", "user_id", userID)
 		return RefreshResult{}, ErrInvalidToken
 	}
 
 	accessToken, err := signAccessJWT(userID, user.Username, s.jwtSecret)
 	if err != nil {
+		slog.Error("refresh failed: JWT signing error", "user_id", userID, "error", err)
 		return RefreshResult{}, err
 	}
 
 	newRefresh, err := newRefreshToken(userID)
 	if err != nil {
+		slog.Error("refresh failed: token generation error", "user_id", userID, "error", err)
 		return RefreshResult{}, err
 	}
 
 	if err := s.tokenRepo.SetRefreshToken(ctx, userID.String(), newRefresh); err != nil {
+		slog.Error("refresh failed: redis error on rotation", "user_id", userID, "error", err)
 		return RefreshResult{}, err
 	}
 
+	slog.Info("refresh success", "user_id", userID)
 	return RefreshResult{AccessToken: accessToken, RefreshToken: newRefresh}, nil
 }
 

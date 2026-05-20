@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"webview-login/backend/auth/repository"
@@ -47,31 +48,38 @@ func (s *LoginService) Login(ctx context.Context, in LoginInput) (LoginResult, e
 
 	user, err := s.userRepo.FindByUsernameOrHashEmail(in.Identifier, hashEmail)
 	if err != nil {
+		slog.Error("login failed: database error", "identifier", in.Identifier, "error", err)
 		return LoginResult{}, err
 	}
 	if user == nil {
+		slog.Warn("login failed: user not found", "identifier", in.Identifier)
 		return LoginResult{}, ErrInvalidCredentials
 	}
 
 	match, err := cipher.VerifyPassword(in.Password, user.HashPassword)
 	if err != nil || !match {
+		slog.Warn("login failed: invalid password", "identifier", in.Identifier)
 		return LoginResult{}, ErrInvalidCredentials
 	}
 
 	accessToken, err := s.signJWT(user.UserID, user.Username)
 	if err != nil {
+		slog.Error("login failed: JWT signing error", "user_id", user.UserID, "error", err)
 		return LoginResult{}, err
 	}
 
 	refreshToken, err := newRefreshToken(user.UserID)
 	if err != nil {
+		slog.Error("login failed: refresh token generation error", "user_id", user.UserID, "error", err)
 		return LoginResult{}, err
 	}
 
 	if err := s.tokenRepo.SetRefreshToken(ctx, user.UserID.String(), refreshToken); err != nil {
+		slog.Error("login failed: redis error", "user_id", user.UserID, "error", err)
 		return LoginResult{}, err
 	}
 
+	slog.Info("login success", "user_id", user.UserID, "username", user.Username)
 	return LoginResult{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
