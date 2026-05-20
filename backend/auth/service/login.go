@@ -1,12 +1,10 @@
 package service
 
 import (
-	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-	"golang.org/x/crypto/bcrypt"
 	"webview-login/backend/cipher"
 	"webview-login/backend/auth/repository"
 )
@@ -44,7 +42,8 @@ func (s *LoginService) Login(in LoginInput) (LoginResult, error) {
 		return LoginResult{}, ErrInvalidCredentials
 	}
 
-	if err := bcrypt.CompareHashAndPassword([]byte(user.HashPassword), []byte(in.Password)); err != nil {
+	match, err := cipher.VerifyPassword(in.Password, user.HashPassword)
+	if err != nil || !match {
 		return LoginResult{}, ErrInvalidCredentials
 	}
 
@@ -70,6 +69,3 @@ func (s *LoginService) signJWT(userID uuid.UUID, username string) (string, error
 	return token.SignedString([]byte(s.jwtSecret))
 }
 
-func isEmail(s string) bool {
-	return strings.Contains(s, "@")
-}

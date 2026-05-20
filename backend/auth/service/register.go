@@ -3,7 +3,6 @@ package service
 import (
 	"errors"
 
-	"golang.org/x/crypto/bcrypt"
 	"webview-login/backend/cipher"
 	"webview-login/backend/auth/model"
 	"webview-login/backend/auth/repository"
@@ -38,7 +37,7 @@ func (s *RegisterService) Register(in RegisterInput) error {
 		return err
 	}
 
-	hashPassword, err := bcrypt.GenerateFromPassword([]byte(in.Password), bcrypt.DefaultCost)
+	hashPassword, err := cipher.HashPassword(in.Password)
 	if err != nil {
 		return err
 	}
@@ -47,7 +46,7 @@ func (s *RegisterService) Register(in RegisterInput) error {
 		Username:     in.Username,
 		HashEmail:    hashEmail,
 		EncEmail:     encEmail,
-		HashPassword: string(hashPassword),
+		HashPassword: hashPassword,
 	})
 	if errors.Is(err, repository.ErrDuplicate) {
 		return ErrConflict
