@@ -1,10 +1,13 @@
 package service
 
 import (
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
+	"webview-login/backend/cipher"
 	"webview-login/backend/auth/repository"
 )
 
@@ -15,22 +18,25 @@ type LoginInput struct {
 
 type LoginResult struct {
 	Token    string
-	ID       uint
+	UserID   uuid.UUID
 	Username string
-	Email    string
 }
 
 type LoginService struct {
-	repo      repository.UserRepo
-	jwtSecret string
+	repo        repository.UserRepo
+	jwtSecret   string
+	emailPepper string
 }
 
-func NewLoginService(repo repository.UserRepo, jwtSecret string) *LoginService {
-	return &LoginService{repo: repo, jwtSecret: jwtSecret}
+func NewLoginService(repo repository.UserRepo, jwtSecret, emailPepper string) *LoginService {
+	return &LoginService{repo: repo, jwtSecret: jwtSecret, emailPepper: emailPepper}
 }
 
 func (s *LoginService) Login(in LoginInput) (LoginResult, error) {
-	user, err := s.repo.FindByIdentifier(in.Identifier)
+	// hash the identifier so we can match against hash_email if it's an email
+	hashEmail := cipher.HashEmail(in.Identifier, s.emailPepper)
+
+	user, err := s.repo.FindByUsernameOrHashEmail(in.Identifier, hashEmail)
 	if err != nil {
 		return LoginResult{}, err
 	}
@@ -38,29 +44,32 @@ func (s *LoginService) Login(in LoginInput) (LoginResult, error) {
 		return LoginResult{}, ErrInvalidCredentials
 	}
 
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(in.Password)); err != nil {
+	if err := bcrypt.CompareHashAndPassword([]byte(user.HashPassword), []byte(in.Password)); err != nil {
 		return LoginResult{}, ErrInvalidCredentials
 	}
 
-	token, err := s.signJWT(user.ID, user.Username)
+	token, err := s.signJWT(user.UserID, user.Username)
 	if err != nil {
 		return LoginResult{}, err
 	}
 
 	return LoginResult{
 		Token:    token,
-		ID:       user.ID,
+		UserID:   user.UserID,
 		Username: user.Username,
-		Email:    user.Email,
 	}, nil
 }
 
-func (s *LoginService) signJWT(id uint, username string) (string, error) {
+func (s *LoginService) signJWT(userID uuid.UUID, username string) (string, error) {
 	claims := jwt.MapClaims{
-		"sub":      id,
+		"sub":      userID.String(),
 		"username": username,
 		"exp":      time.Now().Add(24 * time.Hour).Unix(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(s.jwtSecret))
+}
+
+func isEmail(s string) bool {
+	return strings.Contains(s, "@")
 }

@@ -35,9 +35,8 @@ func (h *LoginHandler) Handle(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"token": result.Token,
 			"user": gin.H{
-				"id":       result.ID,
+				"user_id":  result.UserID,
 				"username": result.Username,
-				"email":    result.Email,
 			},
 		})
 	case errors.Is(err, service.ErrInvalidCredentials):

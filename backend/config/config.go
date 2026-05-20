@@ -14,6 +14,8 @@ type Config struct {
 	DBName         string
 	JWTSecret      string
 	FrontendOrigin string
+	EmailPepper    string
+	AESKey         string // 64-char hex string = 32 bytes for AES-256
 }
 
 func Load() *Config {
@@ -26,6 +28,8 @@ func Load() *Config {
 		DBName:         mustEnv("DB_NAME"),
 		JWTSecret:      mustEnv("JWT_SECRET"),
 		FrontendOrigin: mustEnv("FRONTEND_ORIGIN"),
+		EmailPepper:    mustEnv("EMAIL_PEPPER"),
+		AESKey:         mustEnv("AES_KEY"),
 	}
 }
 

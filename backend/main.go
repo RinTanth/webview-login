@@ -26,12 +26,12 @@ func main() {
 		"host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
 		cfg.DBHost, cfg.DBPort, cfg.DBUser, cfg.DBPassword, cfg.DBName,
 	)
-	db := database.Connect(dsn, &authmodel.User{})
+	db := database.Connect(dsn, &authmodel.UserInfo{})
 
 	// auth domain wiring
 	userRepo := repository.NewUserRepo(db)
-	registerHandler := authhandler.NewRegisterHandler(service.NewRegisterService(userRepo))
-	loginHandler := authhandler.NewLoginHandler(service.NewLoginService(userRepo, cfg.JWTSecret))
+	registerHandler := authhandler.NewRegisterHandler(service.NewRegisterService(userRepo, cfg.EmailPepper, cfg.AESKey))
+	loginHandler := authhandler.NewLoginHandler(service.NewLoginService(userRepo, cfg.JWTSecret, cfg.EmailPepper))
 
 	r := gin.Default()
 	r.Use(middleware.CORS(cfg.FrontendOrigin))

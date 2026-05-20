@@ -2,8 +2,8 @@ package repository
 
 import (
 	"errors"
+	"strings"
 
-	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
 	"webview-login/backend/auth/model"
 )
@@ -11,8 +11,8 @@ import (
 var ErrDuplicate = errors.New("duplicate entry")
 
 type UserRepo interface {
-	Create(user *model.User) error
-	FindByIdentifier(identifier string) (*model.User, error)
+	Create(user *model.UserInfo) error
+	FindByUsernameOrHashEmail(identifier, hashEmail string) (*model.UserInfo, error)
 }
 
 type userRepo struct {
@@ -23,7 +23,7 @@ func NewUserRepo(db *gorm.DB) UserRepo {
 	return &userRepo{db: db}
 }
 
-func (r *userRepo) Create(user *model.User) error {
+func (r *userRepo) Create(user *model.UserInfo) error {
 	if err := r.db.Create(user).Error; err != nil {
 		if isUniqueErr(err) {
 			return ErrDuplicate
@@ -33,9 +33,13 @@ func (r *userRepo) Create(user *model.User) error {
 	return nil
 }
 
-func (r *userRepo) FindByIdentifier(identifier string) (*model.User, error) {
-	var user model.User
-	err := r.db.Where("username = ? OR email = ?", identifier, identifier).First(&user).Error
+// FindByUsernameOrHashEmail looks up by plain username OR pre-hashed email.
+// The caller is responsible for hashing the email before passing it in.
+func (r *userRepo) FindByUsernameOrHashEmail(identifier, hashEmail string) (*model.UserInfo, error) {
+	var user model.UserInfo
+	err := r.db.
+		Where("username = ? OR hash_email = ?", identifier, hashEmail).
+		First(&user).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -46,7 +50,5 @@ func (r *userRepo) FindByIdentifier(identifier string) (*model.User, error) {
 }
 
 func isUniqueErr(err error) bool {
-	var pgErr *pgconn.PgError
-	// 23505 = unique_violation in PostgreSQL
-	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+	return err != nil && strings.Contains(err.Error(), "23505")
 }
