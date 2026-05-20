@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { register } from '../api/auth'
 
 export default function RegisterForm({ onGoToLogin }) {
   const [form, setForm] = useState({
@@ -7,13 +8,15 @@ export default function RegisterForm({ onGoToLogin }) {
     password: '',
     confirmPassword: '',
   })
-  const [error, setError] = useState('')
+  const [error, setError]     = useState('')
+  const [loading, setLoading] = useState(false)
+  const [success, setSuccess] = useState(false)
 
   function handleChange(e) {
     setForm({ ...form, [e.target.name]: e.target.value })
   }
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault()
 
     if (!form.username || !form.email || !form.password || !form.confirmPassword) {
@@ -34,8 +37,27 @@ export default function RegisterForm({ onGoToLogin }) {
     }
 
     setError('')
-    // TODO: call backend API
-    alert(`Registered: ${form.username} (${form.email})`)
+    setLoading(true)
+    try {
+      await register(form.username, form.email, form.password, form.confirmPassword)
+      setSuccess(true)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (success) {
+    return (
+      <div className="card">
+        <h1>All set!</h1>
+        <p className="switch-text">Account created successfully.</p>
+        <button className="btn-primary" onClick={onGoToLogin} style={{ marginTop: '24px' }}>
+          Go to Login
+        </button>
+      </div>
+    )
   }
 
   return (
@@ -89,7 +111,9 @@ export default function RegisterForm({ onGoToLogin }) {
 
         {error && <p className="error">{error}</p>}
 
-        <button type="submit" className="btn-primary">Register</button>
+        <button type="submit" className="btn-primary" disabled={loading}>
+          {loading ? 'Registering...' : 'Register'}
+        </button>
       </form>
 
       <p className="switch-text">
