@@ -1,12 +1,17 @@
 package service
 
 import (
+	"context"
+	"crypto/rand"
+	"encoding/base64"
+	"fmt"
 	"time"
+
+	"webview-login/backend/auth/repository"
+	"webview-login/backend/cipher"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-	"webview-login/backend/cipher"
-	"webview-login/backend/auth/repository"
 )
 
 type LoginInput struct {
@@ -15,26 +20,32 @@ type LoginInput struct {
 }
 
 type LoginResult struct {
-	Token    string
-	UserID   uuid.UUID
-	Username string
+	AccessToken  string
+	RefreshToken string
+	UserID       uuid.UUID
+	Username     string
 }
 
 type LoginService struct {
-	repo        repository.UserRepo
+	userRepo    repository.DatabaseRepo
+	tokenRepo   repository.RedisRepo
 	jwtSecret   string
 	emailPepper string
 }
 
-func NewLoginService(repo repository.UserRepo, jwtSecret, emailPepper string) *LoginService {
-	return &LoginService{repo: repo, jwtSecret: jwtSecret, emailPepper: emailPepper}
+func NewLoginService(userRepo repository.DatabaseRepo, tokenRepo repository.RedisRepo, jwtSecret, emailPepper string) *LoginService {
+	return &LoginService{
+		userRepo:    userRepo,
+		tokenRepo:   tokenRepo,
+		jwtSecret:   jwtSecret,
+		emailPepper: emailPepper,
+	}
 }
 
-func (s *LoginService) Login(in LoginInput) (LoginResult, error) {
-	// hash the identifier so we can match against hash_email if it's an email
+func (s *LoginService) Login(ctx context.Context, in LoginInput) (LoginResult, error) {
 	hashEmail := cipher.HashEmail(in.Identifier, s.emailPepper)
 
-	user, err := s.repo.FindByUsernameOrHashEmail(in.Identifier, hashEmail)
+	user, err := s.userRepo.FindByUsernameOrHashEmail(in.Identifier, hashEmail)
 	if err != nil {
 		return LoginResult{}, err
 	}
@@ -47,15 +58,25 @@ func (s *LoginService) Login(in LoginInput) (LoginResult, error) {
 		return LoginResult{}, ErrInvalidCredentials
 	}
 
-	token, err := s.signJWT(user.UserID, user.Username)
+	accessToken, err := s.signJWT(user.UserID, user.Username)
 	if err != nil {
 		return LoginResult{}, err
 	}
 
+	refreshToken, err := newRefreshToken(user.UserID)
+	if err != nil {
+		return LoginResult{}, err
+	}
+
+	if err := s.tokenRepo.SetRefreshToken(ctx, user.UserID.String(), refreshToken); err != nil {
+		return LoginResult{}, err
+	}
+
 	return LoginResult{
-		Token:    token,
-		UserID:   user.UserID,
-		Username: user.Username,
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		UserID:       user.UserID,
+		Username:     user.Username,
 	}, nil
 }
 
@@ -63,9 +84,18 @@ func (s *LoginService) signJWT(userID uuid.UUID, username string) (string, error
 	claims := jwt.MapClaims{
 		"sub":      userID.String(),
 		"username": username,
-		"exp":      time.Now().Add(24 * time.Hour).Unix(),
+		"exp":      time.Now().Add(15 * time.Minute).Unix(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(s.jwtSecret))
 }
 
+// newRefreshToken generates a token in the format <userID>.<random_bytes>
+// so the server can extract userID from the token without a DB/Redis lookup.
+func newRefreshToken(userID uuid.UUID) (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%s.%s", userID.String(), base64.RawURLEncoding.EncodeToString(b)), nil
+}

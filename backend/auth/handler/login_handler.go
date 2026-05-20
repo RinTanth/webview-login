@@ -26,14 +26,15 @@ func (h *LoginHandler) Handle(c *gin.Context) {
 		return
 	}
 
-	result, err := h.svc.Login(service.LoginInput{
+	result, err := h.svc.Login(c.Request.Context(), service.LoginInput{
 		Identifier: body.Identifier,
 		Password:   body.Password,
 	})
 	switch {
 	case err == nil:
 		c.JSON(http.StatusOK, gin.H{
-			"token": result.Token,
+			"access_token":  result.AccessToken,
+			"refresh_token": result.RefreshToken,
 			"user": gin.H{
 				"user_id":  result.UserID,
 				"username": result.Username,

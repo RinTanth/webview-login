@@ -16,12 +16,12 @@ type RegisterInput struct {
 }
 
 type RegisterService struct {
-	repo        repository.UserRepo
+	repo        repository.DatabaseRepo
 	emailPepper string
 	aesKey      string
 }
 
-func NewRegisterService(repo repository.UserRepo, emailPepper, aesKey string) *RegisterService {
+func NewRegisterService(repo repository.DatabaseRepo, emailPepper, aesKey string) *RegisterService {
 	return &RegisterService{repo: repo, emailPepper: emailPepper, aesKey: aesKey}
 }
 

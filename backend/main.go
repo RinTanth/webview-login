@@ -13,6 +13,7 @@ import (
 	"webview-login/backend/config"
 	"webview-login/backend/database"
 	"webview-login/backend/middleware"
+	"webview-login/backend/memory"
 )
 
 func main() {
@@ -27,11 +28,16 @@ func main() {
 		cfg.DBHost, cfg.DBPort, cfg.DBUser, cfg.DBPassword, cfg.DBName,
 	)
 	db := database.Connect(dsn, &authmodel.UserInfo{})
+	rdb := memory.Connect(cfg.RedisHost, cfg.RedisPort, cfg.RedisPassword)
 
 	// auth domain wiring
-	userRepo := repository.NewUserRepo(db)
+	userRepo := repository.NewDatabaseRepo(db)
+	tokenRepo := repository.NewRedisRepo(rdb, cfg.RefreshTokenTTL, cfg.RedisRefreshTokenKey)
+
 	registerHandler := authhandler.NewRegisterHandler(service.NewRegisterService(userRepo, cfg.EmailPepper, cfg.AESKey))
-	loginHandler := authhandler.NewLoginHandler(service.NewLoginService(userRepo, cfg.JWTSecret, cfg.EmailPepper))
+	loginHandler := authhandler.NewLoginHandler(service.NewLoginService(userRepo, tokenRepo, cfg.JWTSecret, cfg.EmailPepper))
+	refreshHandler := authhandler.NewRefreshHandler(service.NewRefreshService(userRepo, tokenRepo, cfg.JWTSecret))
+	logoutHandler := authhandler.NewLogoutHandler(service.NewLogoutService(tokenRepo))
 
 	r := gin.Default()
 	r.Use(middleware.CORS(cfg.FrontendOrigin))
@@ -40,6 +46,8 @@ func main() {
 	{
 		api.POST("/register", registerHandler.Handle)
 		api.POST("/login", loginHandler.Handle)
+		api.POST("/auth/refresh", refreshHandler.Handle)
+		api.POST("/auth/logout", logoutHandler.Handle)
 	}
 
 	log.Printf("server listening on :%s", cfg.Port)
