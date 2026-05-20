@@ -1,18 +1,10 @@
 package middleware
 
-import (
-	"os"
+import "github.com/gin-gonic/gin"
 
-	"github.com/gin-gonic/gin"
-)
-
-func CORS() gin.HandlerFunc {
+func CORS(allowedOrigin string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		origin := os.Getenv("FRONTEND_ORIGIN")
-		if origin == "" {
-			origin = "http://localhost:5173" // Vite default
-		}
-		c.Header("Access-Control-Allow-Origin", origin)
+		c.Header("Access-Control-Allow-Origin", allowedOrigin)
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
 

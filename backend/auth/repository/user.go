@@ -2,8 +2,8 @@ package repository
 
 import (
 	"errors"
-	"strings"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
 	"webview-login/backend/auth/model"
 )
@@ -25,7 +25,6 @@ func NewUserRepo(db *gorm.DB) UserRepo {
 
 func (r *userRepo) Create(user *model.User) error {
 	if err := r.db.Create(user).Error; err != nil {
-		// sqlite unique constraint message contains "UNIQUE"
 		if isUniqueErr(err) {
 			return ErrDuplicate
 		}
@@ -47,6 +46,7 @@ func (r *userRepo) FindByIdentifier(identifier string) (*model.User, error) {
 }
 
 func isUniqueErr(err error) bool {
-	// SQLite surfaces "UNIQUE constraint failed"; swap for postgres error code "23505"
-	return err != nil && strings.Contains(err.Error(), "UNIQUE")
+	var pgErr *pgconn.PgError
+	// 23505 = unique_violation in PostgreSQL
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
